@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  /* Define custom neon colors and deep blacks */
+  --color-brand-primary: #8b5cf6;
+  --color-brand-secondary: #06b6d4;
+  --color-brand-bg: #09090b; 
+}
+
+@layer base {
+  body {
+    background-color: var(--color-brand-bg);
+    color: white;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none; 
+    margin: 0;
+    padding: 0;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
