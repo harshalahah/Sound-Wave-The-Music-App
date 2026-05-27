@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, SkipForward, SkipBack, Maximize2, Minimize2, Loader2, Volume2, VolumeX, Heart } from 'lucide-react';
 
-export default function FloatingConsole({ track, onTrackEnded }) {
+export default function FloatingConsole({ track, onTrackEnded, onTrackPrev }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [streamUrl, setStreamUrl] = useState(null);
@@ -10,12 +10,35 @@ export default function FloatingConsole({ track, onTrackEnded }) {
   
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(() => {
+    const saved = localStorage.getItem('player_volume');
+    return saved ? parseFloat(saved) : 0.8;
+  });
   const [isMuted, setIsMuted] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
 
   const audioRef = useRef(null);
+
+  // Global playback toggle receiver
+  useEffect(() => {
+    const handleToggle = () => {
+      setIsPlaying(prev => !prev);
+    };
+    window.addEventListener('toggle-playback', handleToggle);
+    return () => window.removeEventListener('toggle-playback', handleToggle);
+  }, []);
+
+  const handlePrev = () => {
+    if (audioRef.current) {
+      if (audioRef.current.currentTime > 3) {
+        audioRef.current.currentTime = 0;
+        setCurrentTime(0);
+      } else if (onTrackPrev) {
+        onTrackPrev();
+      }
+    }
+  };
 
   const toggleLike = async (e) => {
     e.stopPropagation();
@@ -44,6 +67,7 @@ export default function FloatingConsole({ track, onTrackEnded }) {
   const handleVolume = (e) => {
     const vol = Number(e.target.value);
     setVolume(vol);
+    localStorage.setItem('player_volume', vol.toString());
     if (vol > 0) setIsMuted(false);
     if (audioRef.current) audioRef.current.volume = vol;
   };
@@ -53,6 +77,13 @@ export default function FloatingConsole({ track, onTrackEnded }) {
     setIsMuted(newMuted);
     if (audioRef.current) audioRef.current.volume = newMuted ? 0 : volume;
   };
+
+  // Sync initial volume on new audio stream load
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
+  }, [streamUrl, isMuted, volume]);
 
   // When a new track hits the player, reach out to backend for the stream URL
   useEffect(() => {
@@ -134,11 +165,11 @@ export default function FloatingConsole({ track, onTrackEnded }) {
       
       <motion.div 
         layout
-        className="fixed bottom-6 left-1/2 z-50 overflow-hidden backdrop-blur-2xl bg-white/5 border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.5)]"
+        className="fixed bottom-6 left-1/2 z-50 overflow-hidden glass-card border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.6)]"
         animate={{
-          width: isExpanded ? '90vw' : '400px',
-          height: isExpanded ? '90vh' : '80px',
-          borderRadius: isExpanded ? '32px' : '9999px',
+          width: isExpanded ? 'min(90vw, 420px)' : '380px',
+          height: isExpanded ? 'min(80vh, 680px)' : '84px',
+          borderRadius: isExpanded ? '40px' : '9999px',
           x: '-50%'
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -147,36 +178,57 @@ export default function FloatingConsole({ track, onTrackEnded }) {
           
           {/* === COMPACT STATE === */}
           {!isExpanded && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.1 } }} className="flex items-center justify-between w-full h-full px-2">
-              <div className="flex items-center gap-4 cursor-pointer truncate flex-1" onClick={() => setIsExpanded(true)}>
-                <img 
-                  src={thumbUrl} 
-                  alt="" 
-                  className={`w-12 h-12 rounded-full object-cover shadow-lg flex-shrink-0 ${isPlaying ? 'animate-[spin_4s_linear_infinite]' : ''}`} 
-                />
-                <div className="flex flex-col truncate pr-4">
-                  <span className="text-white font-semibold text-sm truncate">{track.title}</span>
-                  <span className="text-gray-400 text-xs text-left truncate">{artistNames}</span>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1, transition: { delay: 0.1 } }} 
+              className="flex items-center justify-between w-full h-full px-2 relative"
+            >
+              <div className="flex items-center gap-3.5 cursor-pointer truncate flex-1" onClick={() => setIsExpanded(true)}>
+                <div className="relative w-12 h-12 flex-shrink-0 select-none">
+                  <img 
+                    src={thumbUrl} 
+                    alt="" 
+                    className={`w-full h-full rounded-full object-cover shadow-md ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`} 
+                  />
+                  {/* Vinyl center dot */}
+                  <div className="absolute inset-[38%] rounded-full bg-[#030303] border border-white/10 shadow-inner flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+                  </div>
+                </div>
+                <div className="flex flex-col truncate pr-3 select-none">
+                  <span className="text-white font-bold text-sm truncate tracking-tight font-['Outfit']">{track.title}</span>
+                  <span className="text-white/45 text-xs text-left truncate font-semibold mt-0.5">{artistNames}</span>
                 </div>
               </div>
               
-              <div className="flex items-center gap-3 text-white/80">
+              <div className="flex items-center gap-2.5 text-white/80">
                 <button 
                   onClick={toggleLike} 
                   disabled={isLiking}
-                  className="mr-2 text-white/50 hover:text-red-500 transition-colors"
+                  className="p-1.5 rounded-full text-white/40 hover:text-red-500 hover:bg-white/5 border border-transparent hover:border-white/5 transition-colors cursor-pointer"
                 >
-                  <Heart size={20} fill={isLiked ? "currentColor" : "none"} className={isLiked ? "text-red-500" : ""} />
+                  <Heart size={18} fill={isLiked ? "#ef4444" : "none"} className={isLiked ? "text-red-500" : ""} />
                 </button>
                 <button 
                   onClick={() => setIsPlaying(!isPlaying)}
                   disabled={isLoadingAudio}
-                  className="w-10 h-10 flex flex-shrink-0 items-center justify-center rounded-full bg-white text-black hover:scale-105 transition-transform disabled:opacity-50"
+                  className="w-10 h-10 flex flex-shrink-0 items-center justify-center rounded-full bg-white text-black hover:scale-105 active:scale-95 transition-all shadow-md cursor-pointer disabled:opacity-50"
                 >
-                  {isLoadingAudio ? <Loader2 size={18} className="animate-spin" /> : (isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />)}
+                  {isLoadingAudio ? <Loader2 size={18} className="animate-spin text-purple-600" /> : (isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />)}
                 </button>
-                <Maximize2 size={18} className="ml-2 hover:text-white cursor-pointer opacity-50 hover:opacity-100 flex-shrink-0" onClick={() => setIsExpanded(true)} />
+                <button
+                  onClick={() => setIsExpanded(true)}
+                  className="p-2 text-white/40 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/5 rounded-full transition-colors cursor-pointer"
+                >
+                  <Maximize2 size={16} className="flex-shrink-0" />
+                </button>
               </div>
+
+              {/* Pill Progress Strip */}
+              <div 
+                className="absolute bottom-[-16px] left-[-16px] right-[-16px] h-[3px] bg-gradient-to-r from-violet-500 to-cyan-400 rounded-full opacity-80" 
+                style={{ width: `calc(${(currentTime / (duration || 1)) * 100}% + 32px)` }} 
+              />
             </motion.div>
           )}
 
@@ -187,64 +239,103 @@ export default function FloatingConsole({ track, onTrackEnded }) {
                 initial={{ opacity: 0, scale: 0.95 }} 
                 animate={{ opacity: 1, scale: 1, transition: { delay: 0.1 } }} 
                 exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.1 } }}
-                className="flex flex-col h-full items-center justify-center relative w-full pt-6"
+                className="flex flex-col h-full items-center justify-between relative w-full px-2 py-4"
               >
-                <button 
-                  onClick={() => setIsExpanded(false)}
-                  className="absolute top-4 right-4 p-3 rounded-full bg-white/10 text-white/70 hover:text-white hover:bg-white/20 transition-all backdrop-blur-md z-10 shadow-xl"
-                >
-                  <Minimize2 size={24} />
-                </button>
-                
-                {/* Massive Artwork */}
-                <div className="relative mb-8">
-                  <div className="absolute inset-[-10px] bg-white/10 blur-xl rounded-3xl animate-pulse" />
-                  <img 
-                    src={thumbUrl} 
-                    alt="" 
-                    className="relative w-64 h-64 md:w-96 md:h-96 rounded-3xl object-cover shadow-[0_0_80px_rgba(0,0,0,0.5)] border border-white/5" 
-                  />
+                {/* Top header options */}
+                <div className="flex items-center justify-between w-full select-none">
+                  <span className="text-[11px] font-extrabold tracking-widest text-white/40 bg-white/5 border border-white/5 px-3.5 py-1.5 rounded-full uppercase">
+                    Playing Deck
+                  </span>
+                  <button 
+                    onClick={() => setIsExpanded(false)}
+                    className="p-2.5 rounded-full bg-white/5 border border-white/5 text-white/55 hover:text-white hover:bg-white/10 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-md"
+                  >
+                    <Minimize2 size={18} />
+                  </button>
                 </div>
                 
-                <div className="text-center w-full max-w-md px-6">
-                  <h2 className="text-3xl md:text-4xl font-bold text-white mb-2 truncate drop-shadow-md flex items-center justify-center gap-4">
-                    {track.title}
-                    <button onClick={toggleLike} disabled={isLiking} className="text-white/50 hover:text-red-500 transition-transform hover:scale-110 active:scale-95 flex-shrink-0">
-                       <Heart size={28} fill={isLiked ? "currentColor" : "none"} className={isLiked ? "text-red-500" : ""} />
-                    </button>
-                  </h2>
-                  <p className="text-lg text-white/60 mb-8 truncate drop-shadow-sm">{artistNames}</p>
+                {/* Massive Vinyl Art with Ambient Reflection Aura */}
+                <div className="relative my-6 select-none flex-shrink-0">
+                  <div className="absolute inset-[-12px] bg-gradient-to-tr from-purple-500/25 to-cyan-500/25 blur-2xl rounded-full opacity-80 animate-[pulse_4s_ease-in-out_infinite]" />
                   
-                  {/* Seek Bar / Scrubbing */}
-                  <div className="flex items-center gap-3 w-full mb-8 px-4">
-                    <span className="text-xs text-white/50 w-10 text-right tracking-widest">{Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, '0')}</span>
+                  <div className="relative w-56 h-56 rounded-full overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.65)] border-4 border-white/5 flex-shrink-0">
+                    <img 
+                      src={thumbUrl} 
+                      alt="" 
+                      className={`w-full h-full object-cover ${isPlaying ? 'animate-[spin_12s_linear_infinite]' : ''}`} 
+                    />
+                    {/* Concentric vinyl groove reflections */}
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(0,0,0,0.3)_60%,rgba(0,0,0,0.85)_100%)] mix-blend-overlay pointer-events-none" />
+                    <div className="absolute inset-0 border-[6px] border-black/10 rounded-full pointer-events-none" />
+                    
+                    {/* Vinyl Center Core */}
+                    <div className="absolute inset-[36%] rounded-full bg-[#030303] border-4 border-white/5 shadow-2xl flex items-center justify-center">
+                      <div className="w-3.5 h-3.5 rounded-full bg-black/60 border border-white/10" />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Bottom Deck Console */}
+                <div className="w-full mt-auto px-2">
+                  
+                  {/* Song Title and Heart Row */}
+                  <div className="flex items-center justify-between gap-4 mb-6">
+                    <div className="flex flex-col text-left truncate flex-1">
+                      <h2 className="text-2xl font-extrabold text-white tracking-tight truncate font-['Outfit'] select-none">{track.title}</h2>
+                      <p className="text-sm font-semibold text-white/45 truncate mt-0.5 leading-none">{artistNames}</p>
+                    </div>
+                    <button 
+                      onClick={toggleLike} 
+                      disabled={isLiking} 
+                      className="text-white/40 hover:text-red-500 transition-all duration-300 hover:scale-105 active:scale-95 flex-shrink-0 cursor-pointer p-2.5 rounded-full bg-white/5 border border-white/5 hover:border-white/10 shadow-md"
+                    >
+                      <Heart size={18} fill={isLiked ? "#ef4444" : "none"} className={isLiked ? "text-red-500 scale-110" : "text-white/60"} />
+                    </button>
+                  </div>
+                  
+                  {/* Timeline Scrubbing Slider */}
+                  <div className="flex flex-col gap-2 w-full mb-6">
                     <input 
                       type="range" 
                       min="0" 
                       max={duration || 100} 
                       value={currentTime} 
                       onChange={handleSeek}
-                      className="flex-1 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-white hover:accent-purple-500 transition-all border-none"
+                      className="custom-slider w-full"
                     />
-                    <span className="text-xs text-white/50 w-10 tracking-widest">{Math.floor(duration / 60)}:{(Math.floor(duration % 60)).toString().padStart(2, '0')}</span>
+                    <div className="flex justify-between text-[10px] font-bold tracking-wider text-white/35 font-mono select-none">
+                      <span>{Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, '0')}</span>
+                      <span>{Math.floor(duration / 60)}:{(Math.floor(duration % 60)).toString().padStart(2, '0')}</span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-center gap-8 text-white w-full">
-                    <SkipBack size={32} className="hover:text-white/80 cursor-pointer transition-colors" />
+                  {/* Playback Buttons */}
+                  <div className="flex items-center justify-center gap-7 text-white/80 w-full mb-6 select-none">
+                    <button 
+                      onClick={handlePrev}
+                      className="p-2 hover:text-white transition-colors cursor-pointer hover:scale-105 active:scale-95"
+                    >
+                      <SkipBack size={24} />
+                    </button>
                     <button 
                       onClick={() => setIsPlaying(!isPlaying)}
                       disabled={isLoadingAudio}
-                      className="w-20 h-20 flex items-center justify-center rounded-full bg-white text-black hover:scale-105 transition-transform outline-none shadow-[0_0_40px_rgba(255,255,255,0.3)] disabled:animate-pulse disabled:scale-95"
+                      className="w-16 h-16 flex items-center justify-center rounded-full bg-white text-black hover:scale-105 active:scale-95 transition-all shadow-[0_8px_25px_rgba(255,255,255,0.2)] border border-white cursor-pointer disabled:opacity-50"
                     >
-                      {isLoadingAudio ? <Loader2 size={32} className="animate-spin" /> : (isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-2" />)}
+                      {isLoadingAudio ? <Loader2 size={24} className="animate-spin text-purple-600" /> : (isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />)}
                     </button>
-                    <SkipForward size={32} onClick={() => { setIsPlaying(false); if (onTrackEnded) onTrackEnded(); }} className="hover:text-white/80 cursor-pointer transition-colors" />
+                    <button 
+                      onClick={() => { setIsPlaying(false); if (onTrackEnded) onTrackEnded(); }} 
+                      className="p-2 hover:text-white transition-colors cursor-pointer hover:scale-105 active:scale-95"
+                    >
+                      <SkipForward size={24} />
+                    </button>
                   </div>
                   
-                  {/* Volume Control */}
-                  <div className="flex items-center justify-center gap-3 mt-8 w-full max-w-[200px] mx-auto text-white/60 hover:text-white transition-colors">
-                     <button onClick={toggleMute} className="flex-shrink-0">
-                       {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                  {/* Volume Slider Bar */}
+                  <div className="flex items-center justify-center gap-3 w-full max-w-[170px] mx-auto text-white/35 hover:text-white/60 transition-colors">
+                     <button onClick={toggleMute} className="flex-shrink-0 cursor-pointer p-1.5 rounded-full hover:bg-white/5 border border-transparent hover:border-white/5 transition-all active:scale-95">
+                       {isMuted || volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
                      </button>
                      <input 
                       type="range" 
@@ -253,9 +344,10 @@ export default function FloatingConsole({ track, onTrackEnded }) {
                       step="0.01"
                       value={isMuted ? 0 : volume} 
                       onChange={handleVolume}
-                      className="flex-1 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-white outline-none"
+                      className="custom-slider flex-1"
                     />
                   </div>
+                  
                 </div>
               </motion.div>
             )}
