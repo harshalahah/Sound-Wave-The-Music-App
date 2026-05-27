@@ -1,4 +1,4 @@
-# Midnight Equinox: Architect & Developer Guide
+# Sound Wave: Architect & Developer Guide
 
 Welcome to the technical backend and frontend documentation for your personal music streaming app. This guide explains how everything connects, special secrets hidden in the code, and how to boot up your servers safely.
 
