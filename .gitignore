@@ -15,3 +15,5 @@ frontend/dist/
 # OS junk
 .DS_Store
 Thumbs.db
+
+backend/musicapp.db

@@ -137,7 +137,7 @@ export default function App() {
       
       <nav className="fixed top-0 w-full z-30 px-8 py-6 flex items-center justify-between pointer-events-none">
         <h1 className="text-2xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-          Equinox
+          SoundWave
         </h1>
         <div className="flex items-center gap-4 pointer-events-auto">
           <button 
